@@ -15,10 +15,14 @@ download_folder = "downloads"
 if not os.path.exists(download_folder):
     os.makedirs(download_folder)
 
-# 1. 사이드바: 쿠키 파일 업로드 (403 에러 해결용)
+# 1. 사이드바: 쿠키 파일 설정
 st.sidebar.header("🔧 설정 (403 에러 해결)")
-cookie_file = st.sidebar.file_uploader("cookies.txt 파일을 업로드하세요", type=["txt"])
-st.sidebar.info("유튜브가 서버 IP를 차단할 경우, 크롬 확장프로그램('Get cookies.txt LOCALLY')으로 추출한 쿠키 파일이 필요합니다.")
+st.sidebar.markdown("""
+**사용 방법:**
+1. `cookies.txt` 파일을 깃허브 저장소에 같이 올려두면 매번 업로드할 필요가 없습니다.
+2. 만약 저장소의 쿠키가 만료되어 에러가 나면, 아래에 새 파일을 업로드해서 임시로 쓸 수 있습니다.
+""")
+uploaded_cookie = st.sidebar.file_uploader("쿠키 파일 갱신/임시 사용", type=["txt"])
 
 # 2. 메인 입력
 url = st.text_input("유튜브 링크 입력:", placeholder="https://youtube.com/...")
@@ -37,20 +41,30 @@ if st.button("변환 시작"):
                 shutil.rmtree(download_folder)
             os.makedirs(download_folder)
 
-            # 쿠키 파일 처리
+            # 쿠키 파일 우선순위 결정
+            # 1순위: 사이드바에서 직접 업로드한 파일 (임시 사용)
+            # 2순위: 깃허브 저장소에 있는 'cookies.txt' (기본 사용)
             cookie_path = None
-            if cookie_file is not None:
-                # 업로드된 쿠키 파일을 임시로 저장
+            
+            if uploaded_cookie is not None:
+                # 사용자가 방금 업로드한 경우
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp:
-                    tmp.write(cookie_file.getvalue())
+                    tmp.write(uploaded_cookie.getvalue())
                     cookie_path = tmp.name
+                st.info("📂 업로드된 쿠키 파일을 사용합니다.")
+            elif os.path.exists("cookies.txt"):
+                # 저장소에 파일이 있는 경우
+                cookie_path = "cookies.txt"
+                st.info("📂 저장소에 있는 'cookies.txt' 파일을 자동으로 사용합니다.")
+            else:
+                st.warning("⚠️ 쿠키 파일이 없습니다. 유튜브 차단(403)이 발생할 수 있습니다.")
 
             # yt-dlp 옵션 설정
             ydl_opts = {
                 'outtmpl': f'{download_folder}/%(title)s.%(ext)s',
                 'no_warnings': True,
                 # 쿠키 파일이 있으면 사용
-                'cookiefile': cookie_path if cookie_path else None,
+                'cookiefile': cookie_path,
                 # 차단 방지를 위한 추가 헤더
                 'http_headers': {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -84,8 +98,8 @@ if st.button("변환 시작"):
                         final_filename = os.path.join(download_folder, f)
                         break
             
-            # 임시 쿠키 파일 삭제
-            if cookie_path and os.path.exists(cookie_path):
+            # 임시 생성된 쿠키 파일만 삭제 (저장소 원본은 삭제 안 함)
+            if uploaded_cookie is not None and cookie_path and os.path.exists(cookie_path):
                 os.remove(cookie_path)
 
             # 다운로드 버튼 생성
@@ -104,4 +118,4 @@ if st.button("변환 시작"):
         except Exception as e:
             st.error(f"오류 발생: {e}")
             if "403" in str(e):
-                st.warning("⚠️ 유튜브가 서버 접근을 차단했습니다. 왼쪽 사이드바에 'cookies.txt'를 업로드하면 해결됩니다.")
+                st.warning("⚠️ 유튜브 차단(403 Forbidden)이 발생했습니다. 쿠키 파일이 만료되었을 수 있으니 새로 업로드해주세요.")
