@@ -26,12 +26,19 @@ if 'mime_type' not in st.session_state:
 
 # 1. 사이드바: 쿠키 파일 설정
 st.sidebar.header("🔧 설정 (403 에러 해결)")
-st.sidebar.markdown("""
-**사용 방법:**
-1. `cookies.txt` 파일을 깃허브 저장소에 같이 올려두면 매번 업로드할 필요가 없습니다.
-2. 만약 저장소의 쿠키가 만료되어 에러가 나면, 아래에 새 파일을 업로드해서 임시로 쓸 수 있습니다.
-""")
-uploaded_cookie = st.sidebar.file_uploader("쿠키 파일 갱신/임시 사용", type=["txt"])
+
+# [핵심 변경] 쿠키 다운로드 방법을 아주 쉽고 직관적으로 안내
+with st.sidebar.expander("❓ 쿠키(cookies.txt) 어떻게 다운받나요?", expanded=True):
+    st.markdown("""
+    **단 1분이면 됩니다!**
+    1. PC 크롬 브라우저에서 👉 [여기(확장프로그램)](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpgnnhmhfhkio)를 눌러 설치합니다.
+    2. [유튜브 홈페이지](https://youtube.com)에 접속합니다.
+    3. 우측 상단 🧩퍼즐 아이콘을 눌러 방금 설치한 프로그램(쿠키 아이콘)을 켭니다.
+    4. **[Export]** 버튼을 누르면 `cookies.txt`가 내 컴퓨터로 다운로드됩니다.
+    5. 다운받은 파일을 아래 빈칸에 끌어다 놓으세요!
+    """)
+
+uploaded_cookie = st.sidebar.file_uploader("쿠키 파일 업로드 (cookies.txt)", type=["txt"])
 
 # 2. 메인 입력
 url = st.text_input("유튜브 링크 입력:", placeholder="https://youtube.com/...")
@@ -89,9 +96,9 @@ if st.button("변환 시작"):
                 with open(cookie_path, 'r', encoding='utf-8', errors='ignore') as f:
                     first_line = f.readline()
                     if "# Netscape HTTP Cookie File" not in first_line and "# This is a generated file" not in first_line:
-                        st.warning("⚠️ 쿠키 파일 형식이 Netscape 포맷이 아닙니다. 'Get cookies.txt LOCALLY' 확장 프로그램을 사용해주세요.")
+                        st.warning("⚠️ 쿠키 파일 형식이 Netscape 포맷이 아닙니다. 안내된 확장 프로그램을 사용해주세요.")
 
-            # [핵심 변경] 임시 디렉토리 사용 (작업 끝나면 자동 삭제됨)
+            # 임시 디렉토리 사용 (작업 끝나면 자동 삭제됨)
             with tempfile.TemporaryDirectory() as temp_dir:
                 
                 # yt-dlp 옵션
@@ -128,7 +135,6 @@ if st.button("변환 시작"):
                 # 다운로드 실행
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
-                    # title = info.get('title', 'video') # 사용 안함
                     ext = 'mp3' if "음원" in option else 'mp4'
                     
                     # 파일 찾기
@@ -143,7 +149,7 @@ if st.button("변환 시작"):
                         file_size_mb = os.path.getsize(final_filename) / (1024 * 1024)
                         
                         if file_size_mb > 0:
-                            # [중요] 파일을 메모리로 완전히 읽어들임
+                            # 파일을 메모리로 완전히 읽어들임
                             with open(final_filename, "rb") as f:
                                 st.session_state.file_data = f.read()
                             
@@ -157,8 +163,6 @@ if st.button("변환 시작"):
                     else:
                         status.error("파일 생성 실패.")
             
-            # (with tempfile 블록을 나오면서 임시 폴더와 파일은 디스크에서 자동 삭제됨)
-            
             # 임시 생성된 쿠키 파일 삭제
             if temp_cookie_file and os.path.exists(temp_cookie_file.name):
                 os.remove(temp_cookie_file.name)
@@ -166,7 +170,7 @@ if st.button("변환 시작"):
         except Exception as e:
             st.error(f"오류 발생: {e}")
             if "403" in str(e):
-                st.warning("⚠️ 유튜브 서버 차단(403)입니다. 쿠키 파일을 확인해주세요.")
+                st.warning("⚠️ 유튜브 서버 차단(403)입니다. 사이드바의 안내에 따라 쿠키 파일을 다시 업로드해주세요.")
 
 # 3. 다운로드 버튼 표시 (메모리에 저장된 데이터 사용)
 if st.session_state.download_ready and st.session_state.file_data:
