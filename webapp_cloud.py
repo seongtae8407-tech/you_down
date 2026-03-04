@@ -20,22 +20,26 @@ if 'download_ready' not in st.session_state:
 if 'file_name' not in st.session_state:
     st.session_state.file_name = ""
 if 'file_data' not in st.session_state:
-    st.session_state.file_data = None  # 파일 내용을 메모리에 저장할 변수
+    st.session_state.file_data = None
 if 'mime_type' not in st.session_state:
     st.session_state.mime_type = ""
 
 # 1. 사이드바: 쿠키 파일 설정
 st.sidebar.header("🔧 설정 (403 에러 해결)")
 
-# [핵심 변경] 쿠키 다운로드 방법을 아주 쉽고 직관적으로 안내
+# [핵심 변경] 링크 대신 검색 방법으로 안내 (구글의 확장프로그램 삭제 대비)
 with st.sidebar.expander("❓ 쿠키(cookies.txt) 어떻게 다운받나요?", expanded=True):
     st.markdown("""
-    **단 1분이면 됩니다!**
-    1. PC 크롬 브라우저에서 👉 [여기(확장프로그램)](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpgnnhmhfhkio)를 눌러 설치합니다.
-    2. [유튜브 홈페이지](https://youtube.com)에 접속합니다.
-    3. 우측 상단 🧩퍼즐 아이콘을 눌러 방금 설치한 프로그램(쿠키 아이콘)을 켭니다.
-    4. **[Export]** 버튼을 누르면 `cookies.txt`가 내 컴퓨터로 다운로드됩니다.
-    5. 다운받은 파일을 아래 빈칸에 끌어다 놓으세요!
+    **크롬 웹스토어 검색을 이용하세요! (1분 소요)**
+    
+    구글이 관련 프로그램을 자주 삭제하므로 직접 검색하는 것이 가장 확실합니다.
+    
+    1. [크롬 웹스토어](https://chromewebstore.google.com/)에 접속합니다.
+    2. 검색창에 **`Get cookies.txt`** 라고 검색합니다.
+    3. 결과 중 쿠키 모양 아이콘이 있는 확장 프로그램을 아무거나 **[Chrome에 추가]** 합니다.
+    4. [유튜브 홈페이지](https://youtube.com)에 접속 (로그인 상태 권장)합니다.
+    5. 화면 우측 상단 🧩퍼즐 아이콘을 눌러 방금 설치한 쿠키 프로그램을 실행하고 **[Export]** 버튼을 누릅니다.
+    6. 다운받은 `cookies.txt` 파일을 아래 빈칸에 끌어다 놓으세요!
     """)
 
 uploaded_cookie = st.sidebar.file_uploader("쿠키 파일 업로드 (cookies.txt)", type=["txt"])
@@ -75,14 +79,13 @@ if st.button("변환 시작"):
             
             # 쿠키 파일 처리
             cookie_path = None
-            # 임시 쿠키 파일 생성을 위한 관리자
             temp_cookie_file = None 
 
             if uploaded_cookie is not None:
                 # 사용자가 업로드한 경우 임시 파일 생성
                 temp_cookie_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
                 temp_cookie_file.write(uploaded_cookie.getvalue())
-                temp_cookie_file.close() # 쓰기 종료 후 닫기
+                temp_cookie_file.close()
                 cookie_path = temp_cookie_file.name
                 st.info("📂 업로드된 쿠키 파일을 사용합니다.")
             elif os.path.exists("cookies.txt"):
@@ -103,7 +106,7 @@ if st.button("변환 시작"):
                 
                 # yt-dlp 옵션
                 ydl_opts = {
-                    'outtmpl': f'{temp_dir}/%(title)s.%(ext)s', # 임시 폴더에 저장
+                    'outtmpl': f'{temp_dir}/%(title)s.%(ext)s',
                     'no_warnings': True,
                     'cookiefile': cookie_path,
                     'http_headers': {
