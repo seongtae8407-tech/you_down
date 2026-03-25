@@ -1,9 +1,7 @@
 import streamlit as st
 import yt_dlp
 import os
-import shutil
 import tempfile
-import time
 
 # 페이지 설정
 st.set_page_config(page_title="유튜브 다운로더", page_icon="🎬")
@@ -12,7 +10,7 @@ st.title("🎬 YouTube Cloud Downloader")
 st.write("서버 차단(403) 방지를 위해 쿠키 파일이 필요할 수 있습니다.")
 
 # [추가] 무료 서버 용량 제한 안내
-st.info("⚠️ **주의:** Streamlit 무료 서버의 메모리 한계로 인해, **20분 이상의 고화질 영상**이나 **500MB 이상의 파일**은 다운로드가 실패하거나 멈출 수 있습니다.")
+st.info("⚠️ **주의:** Streamlit 무료 서버의 메모리 한계로 인해, **20분 이상의 고화질 영상**은 실패할 수 있습니다.")
 
 # 세션 상태 초기화
 if 'download_ready' not in st.session_state:
@@ -27,19 +25,11 @@ if 'mime_type' not in st.session_state:
 # 1. 사이드바: 쿠키 파일 설정
 st.sidebar.header("🔧 설정 (403 에러 해결)")
 
-# [핵심 변경] 링크 대신 검색 방법으로 안내 (구글의 확장프로그램 삭제 대비)
-with st.sidebar.expander("❓ 쿠키(cookies.txt) 어떻게 다운받나요?", expanded=True):
+with st.sidebar.expander("❓ 쿠키(cookies.txt) 어떻게 다운받나요?", expanded=False):
     st.markdown("""
-    **크롬 웹스토어 검색을 이용하세요! (1분 소요)**
-    
-    구글이 관련 프로그램을 자주 삭제하므로 직접 검색하는 것이 가장 확실합니다.
-    
-    1. [크롬 웹스토어](https://chromewebstore.google.com/)에 접속합니다.
-    2. 검색창에 **`Get cookies.txt`** 라고 검색합니다.
-    3. 결과 중 쿠키 모양 아이콘이 있는 확장 프로그램을 아무거나 **[Chrome에 추가]** 합니다.
-    4. [유튜브 홈페이지](https://youtube.com)에 접속 (로그인 상태 권장)합니다.
-    5. 화면 우측 상단 🧩퍼즐 아이콘을 눌러 방금 설치한 쿠키 프로그램을 실행하고 **[Export]** 버튼을 누릅니다.
-    6. 다운받은 `cookies.txt` 파일을 아래 빈칸에 끌어다 놓으세요!
+    1. 브라우저에서 **'Get cookies.txt LOCALLY'** 확장 프로그램 설치.
+    2. 유튜브 접속 후 확장 프로그램 실행 -> **Export** 클릭.
+    3. 다운받은 파일을 아래에 업로드하세요.
     """)
 
 uploaded_cookie = st.sidebar.file_uploader("쿠키 파일 업로드 (cookies.txt)", type=["txt"])
@@ -48,72 +38,50 @@ uploaded_cookie = st.sidebar.file_uploader("쿠키 파일 업로드 (cookies.txt
 url = st.text_input("유튜브 링크 입력:", placeholder="https://youtube.com/...")
 option = st.radio("형식 선택:", ("동영상 (MP4)", "음원 (MP3)"))
 
-# 동영상 선택 시 화질 옵션 제공
-quality_setting = "High"
+# 화질 설정 로직
+quality_setting = "Low"
 if "동영상" in option:
     st.markdown("---")
-    st.caption("💡 **팁:** '일반 화질'을 선택하면 다운로드 성공 확률이 훨씬 높습니다.")
     quality_choice = st.radio(
-        "화질 선택 (서버 부하 조절):", 
-        ("일반 화질 (720p/480p) - 추천 👍", "최고 화질 (1080p/4K) - 실패할 수 있음 ⚠️"),
+        "화질 선택:", 
+        ("일반 화질 (720p 이하) - 권장 👍", "최고 화질 (원본) - 실패 가능성 있음 ⚠️"),
         index=0 
     )
-    
-    if "일반" in quality_choice:
-        quality_setting = "Low"
-    else:
-        quality_setting = "High"
+    quality_setting = "Low" if "일반" in quality_choice else "High"
 
-# 변환 버튼 (누르면 처리 시작)
+# 변환 버튼
 if st.button("변환 시작"):
     if not url:
         st.error("링크를 입력해주세요.")
     else:
         status = st.empty()
-        status.info("작업을 시작합니다... (잠시만 기다려주세요)")
+        status.info("작업을 시작합니다... (영상이 길면 오래 걸릴 수 있습니다)")
         
         try:
-            # 상태 초기화
             st.session_state.download_ready = False
-            st.session_state.file_data = None
             
-            # 쿠키 파일 처리
             cookie_path = None
             temp_cookie_file = None 
 
             if uploaded_cookie is not None:
-                # 사용자가 업로드한 경우 임시 파일 생성
                 temp_cookie_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
                 temp_cookie_file.write(uploaded_cookie.getvalue())
                 temp_cookie_file.close()
                 cookie_path = temp_cookie_file.name
-                st.info("📂 업로드된 쿠키 파일을 사용합니다.")
             elif os.path.exists("cookies.txt"):
                 cookie_path = "cookies.txt"
-                st.info("📂 저장소에 있는 'cookies.txt' 파일을 자동으로 사용합니다.")
-            else:
-                st.warning("⚠️ 쿠키 파일이 없습니다. 유튜브 차단(403)이 발생할 수 있습니다.")
 
-            # 쿠키 형식 검사
-            if cookie_path:
-                with open(cookie_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    first_line = f.readline()
-                    if "# Netscape HTTP Cookie File" not in first_line and "# This is a generated file" not in first_line:
-                        st.warning("⚠️ 쿠키 파일 형식이 Netscape 포맷이 아닙니다. 안내된 확장 프로그램을 사용해주세요.")
-
-            # 임시 디렉토리 사용 (작업 끝나면 자동 삭제됨)
             with tempfile.TemporaryDirectory() as temp_dir:
-                
-                # yt-dlp 옵션
+                # 기본 옵션 설정
                 ydl_opts = {
                     'outtmpl': f'{temp_dir}/%(title)s.%(ext)s',
-                    'no_warnings': True,
                     'cookiefile': cookie_path,
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    }
+                    'noplaylist': True,
+                    'quiet': True,
+                    'no_warnings': True,
                 }
 
+                # [핵심 수정] 포맷 선택 로직 강화
                 if "음원" in option:
                     ydl_opts.update({
                         'format': 'bestaudio/best',
@@ -125,11 +93,13 @@ if st.button("변환 시작"):
                     })
                 else:
                     if quality_setting == "Low":
+                        # MP4 우선, 720p 이하 중 가장 좋은 것 선택
                         ydl_opts.update({
-                            'format': 'best[height<=720]/bestvideo[height<=720]+bestaudio/best',
+                            'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
                             'merge_output_format': 'mp4',
                         })
                     else:
+                        # 최고 화질 시도하되, 없으면 차선책(fallback) 선택
                         ydl_opts.update({
                             'format': 'bestvideo+bestaudio/best',
                             'merge_output_format': 'mp4',
@@ -140,48 +110,37 @@ if st.button("변환 시작"):
                     info = ydl.extract_info(url, download=True)
                     ext = 'mp3' if "음원" in option else 'mp4'
                     
-                    # 파일 찾기
+                    # 실제 생성된 파일 찾기
                     final_filename = None
                     for f in os.listdir(temp_dir):
                         if f.endswith(f".{ext}"):
                             final_filename = os.path.join(temp_dir, f)
                             break
                 
-                    # 파일 처리 및 메모리 저장
                     if final_filename and os.path.exists(final_filename):
-                        file_size_mb = os.path.getsize(final_filename) / (1024 * 1024)
+                        with open(final_filename, "rb") as f:
+                            st.session_state.file_data = f.read()
                         
-                        if file_size_mb > 0:
-                            # 파일을 메모리로 완전히 읽어들임
-                            with open(final_filename, "rb") as f:
-                                st.session_state.file_data = f.read()
-                            
-                            st.session_state.file_name = os.path.basename(final_filename)
-                            st.session_state.mime_type = "audio/mpeg" if "음원" in option else "video/mp4"
-                            st.session_state.download_ready = True
-                            
-                            status.success(f"✅ 변환 완료! ({file_size_mb:.1f} MB)")
-                        else:
-                            status.error("파일이 생성되었으나 비어있습니다 (0바이트).")
+                        st.session_state.file_name = os.path.basename(final_filename)
+                        st.session_state.mime_type = "audio/mpeg" if "음원" in option else "video/mp4"
+                        st.session_state.download_ready = True
+                        status.success(f"✅ 변환 완료: {st.session_state.file_name}")
                     else:
-                        status.error("파일 생성 실패.")
-            
-            # 임시 생성된 쿠키 파일 삭제
-            if temp_cookie_file and os.path.exists(temp_cookie_file.name):
+                        status.error("파일 변환에 실패했습니다. 포맷을 찾을 수 없습니다.")
+
+            if temp_cookie_file:
                 os.remove(temp_cookie_file.name)
 
         except Exception as e:
             st.error(f"오류 발생: {e}")
             if "403" in str(e):
-                st.warning("⚠️ 유튜브 서버 차단(403)입니다. 사이드바의 안내에 따라 쿠키 파일을 다시 업로드해주세요.")
+                st.warning("⚠️ 유튜브 차단입니다. 최신 쿠키 파일을 업로드해주세요.")
 
-# 3. 다운로드 버튼 표시 (메모리에 저장된 데이터 사용)
+# 3. 다운로드 버튼
 if st.session_state.download_ready and st.session_state.file_data:
     st.download_button(
-        label=f"📥 다운로드: {st.session_state.file_name}",
+        label="📥 파일 다운로드 하기",
         data=st.session_state.file_data,
         file_name=st.session_state.file_name,
         mime=st.session_state.mime_type
     )
-elif st.session_state.download_ready and not st.session_state.file_data:
-    st.warning("⚠️ 데이터가 만료되었습니다. 다시 변환해주세요.")
